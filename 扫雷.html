@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en" style="width: 100%;height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <title>扫雷</title>
+</head>
+<body style="width: 100%; height: 100%;">
+<div style="width: 800px; padding: 30px;position: absolute;left: 50%; transform: translate(-50%, 0)">
+    <label>雷数目：</label><input id="cnt" value="40"/>
+    <label>行数：</label><input id="row" value="10"/>
+    <label>列数：</label><input id="col" value="20"/>
+    <button onclick="start()">开始</button></div>
+<div style="position: absolute;top: 80px;left: 50%; transform: translate(-50%, 0)">
+    <canvas id="canvas" width="800px" height="600px" style="border: 5px solid black;"></canvas>
+    <div style="margin: auto;width: 160px">
+        <label>剩余雷数目：</label><label id="remain">40</label>
+    </div>
+</div>
+<div id="success" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); position: relative;z-index: 99999; display: none"
+     onclick="show(this, false)">
+    <div style="position: absolute;top: 50%;left: 50%; transform: translate(-50%, -50%); font-size: 50px;color: white">Success!</div>
+</div>
+<div id="fail" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); position: relative;z-index: 99999; display: none"
+     onclick="show(this, false)">
+    <div style="position: absolute;top: 50%;left: 50%; transform: translate(-50%, -50%); font-size: 50px;color: white">Failed!</div>
+</div>
+</body>
+<script>
+    let m = 40, n = 30, cnt = 100
+    let last
+    let inGame = false
+    let color = ["SeaGreen", "orange", "red", "green", "cyan", "blue", "purple", "pink"]
+    let c = document.getElementById('canvas')
+    let ctx = c.getContext('2d')
+    let board
+    let dir = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
+    function start() {
+        last = undefined
+        m = parseInt(document.getElementById('col').value)
+        n = parseInt(document.getElementById('row').value)
+        cnt = parseInt(document.getElementById('cnt').value)
+        if(m < 10 || m > 60) {
+            alert("列数目必须位于10~60之间！")
+            return
+        }
+        if(n < 5 || n > 40) {
+            alert("行数目必须位于5~40之间！")
+            return
+        }
+        if(cnt <= 1) {
+            alert("雷数目必须大于1！")
+            return
+        }
+        if(cnt > m * n / 2) {
+            alert("雷数目不可以多于一半！")
+            return
+        }
+        board = init()
+        let tmp = cnt
+        while (tmp > 0) {
+            let i = Math.floor(Math.random() * m), j = Math.floor(Math.random() * n)
+            if(board[i][j] == ' ') {
+                board[i][j] = 'M'
+                tmp--
+            }
+        }
+        inGame = true
+        refresh()
+    }
+    document.getElementById('canvas').addEventListener('click', (e) => {
+        let x = Math.floor(e.offsetX / 20), y = Math.floor(e.offsetY / 20)
+        if(inGame) {
+            if(board[x][y] != 'M' && board[x][y] != ' ') {
+                return
+            }
+            last = [x, y]
+            click(x, y)
+            refresh()
+        }
+
+    })
+    document.getElementById('canvas').addEventListener('contextmenu', e => {
+        e.preventDefault()
+        let x = Math.floor(e.offsetX / 20), y = Math.floor(e.offsetY / 20)
+        console.log(board[x][y], inGame)
+        if(inGame) {
+            if(board[x][y] != 'M' && board[x][y] != ' ') {
+                console.log(board[x][y])
+                return
+            }
+            last = [x, y]
+            if(board[x][y] != 'M') {
+                inGame = false
+                board[x][y] = 'O'
+                endGame()
+                refresh()
+            } else {
+                board[x][y] = 'F'
+                refresh()
+            }
+        }
+    })
+    function init() {
+        let board = []
+        for(let i = 0; i < m; i++) {
+            board.push([])
+            for(let j = 0; j < n; j++) {
+                board[i].push(' ')
+            }
+        }
+        return board
+    }
+
+    function show(element, flag) {
+        if(flag) {
+            element.style.display = 'block';
+        } else {
+            element.style.display = 'none';
+            start()
+        }
+    }
+
+    function drawRect(i, j, fillColor, strokeColor) {
+        ctx.beginPath()
+        ctx.fillStyle = fillColor
+        ctx.strokeStyle = strokeColor
+        ctx.rect(20 * i, 20 * j, 20, 20)
+        ctx.stroke()
+        ctx.fill()
+    }
+
+    function drawCircle(i, j) {
+        ctx.beginPath()
+        ctx.fillStyle = 'black'
+        ctx.arc(20 * i + 10, 20 * j + 10, 6, 0, 2 * Math.PI)
+        ctx.fill()
+    }
+
+    // X: 挖开的地雷（出现即死） M: 隐藏的地雷 B:挖开的正常格子（周围没有地雷） 数字1-8：挖开的格子（周围有1-8颗地雷）
+    // F:标注出来的地雷 空格：没有挖开的正常格子 O:错误标注的地雷（出现即死）
+    function refresh() {
+        document.getElementById('canvas').width = m * 20
+        document.getElementById('canvas').height = n * 20
+        let remain = 0
+        let found = 0
+        for (let i = 0; i < m; i++) {
+            for (let j = 0; j < n; j++) {
+                if (board[i][j] == ' ' || board[i][j] == 'M') {
+                    if(board[i][j] == ' ') {
+                        remain++
+                    }
+                    drawRect(i, j, '#cccccc', 'white');
+                } else if (board[i][j] == 'X') {
+                    drawRect(i, j, 'white', 'grey');
+                    drawCircle(i, j);
+                } else if (board[i][j] == 'B') {
+                    drawRect(i, j, 'white', 'grey');
+                } else if (board[i][j] == 'F') {
+                    drawRect(i, j, '#cccccc', 'white');
+                    drawFlag(i, j)
+                    found++
+                } else if (board[i][j] == 'O') {
+                    drawRect(i, j, '#cccccc', 'white');
+                    drawFlag(i, j)
+                    drawX(i, j)
+                } else {
+                    drawRect(i, j, 'white', 'grey');
+                    canvasText(ctx, board[i][j], "15px bold 黑体", color[board[i][j] - '1'], 20 * i + 10, 20 * j + 10);
+                }
+
+                if (last && last[0] == i && last[1] == j) {
+                    ctx.beginPath()
+                    ctx.strokeStyle = 'red'
+                    ctx.rect(20 * i, 20 * j, 20, 20)
+                    ctx.stroke()
+                }
+            }
+        }
+        document.getElementById('remain').innerText = String(cnt - found)
+        console.log(String(cnt - found), cnt , found)
+        if(remain === 0 && inGame) {
+            inGame = false
+            show(document.getElementById('success'), true)
+        } else if(!inGame) {
+            show(document.getElementById('fail'), true)
+        }
+    }
+    function canvasText(ctx, text, font, color, x, y) {
+        ctx.font = font;
+        ctx.fillStyle = color;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, x, y);
+    }
+
+    function drawFlag(x, y) {
+        x = x * 20
+        y = y * 20
+        ctx.beginPath()
+        ctx.strokeStyle = 'black'
+        ctx.fillStyle = 'red'
+        ctx.moveTo(x + 5, y + 5)
+        ctx.lineTo(x + 13, y + 10)
+        ctx.lineTo(x + 5, y + 10)
+        ctx.lineTo(x + 5, y + 15)
+        ctx.closePath()
+        ctx.stroke()
+        ctx.fill()
+    }
+
+    function drawX(x, y) {
+        x = x * 20
+        y = y * 20
+        ctx.strokeStyle = 'black'
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(x + 20, y + 20)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(x + 20, y)
+        ctx.lineTo(x, y + 20)
+        ctx.stroke()
+    }
+
+
+
+    function endGame() {
+        for(let i = 0; i < m; i++) {
+            for (let j = 0; j < n; j++) {
+                if(board[i][j] == 'M') {
+                    board[i][j] = 'X'
+                } else if(board[i][j] == ' ') {
+                    let mC = 0
+                    for(let d of dir) {
+                        let nextI = i + d[0], nextJ = j + d[1]
+                        if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && (board[nextI][nextJ] == 'M' || board[nextI][nextJ] == 'F' || (board[nextI][nextJ] == 'M' || board[nextI][nextJ] == 'X'))) {
+                            mC++;
+                        }
+                    }
+                    if(mC > 0) {
+                        board[i][j] = mC
+                    } else {
+                        board[i][j] = 'B'
+                    }
+                }
+            }
+        }
+    }
+
+    function click(i, j) {
+        let mC = 0
+        if(board[i][j] == 'M') {
+            inGame = false
+            board[i][j] = 'X'
+            endGame()
+            return
+        }
+        for(let d of dir) {
+            let nextI = i + d[0], nextJ = j + d[1]
+            if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && (board[nextI][nextJ] == 'M' || board[nextI][nextJ] == 'F')) {
+                mC++;
+            }
+        }
+        if(mC > 0) {
+            board[i][j] = mC;
+            return
+        }
+        board[i][j] = 'B'
+        for(let d of dir) {
+            let nextI = i + d[0], nextJ = j + d[1]
+            if (nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && board[nextI][nextJ] == ' ') {
+                click(nextI, nextJ)
+            }
+        }
+    }
+    start()
+</script>
+</html>
