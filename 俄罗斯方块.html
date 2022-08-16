@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en" style="width: 100%;height: 100%">
+<head>
+    <meta charset="UTF-8">
+    <title>俄罗斯方块</title>
+</head>
+<body style="width: 100%;height: 100%;margin: 0">
+<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%)">
+    <div style="padding: 5px;height: 40px">
+        <label>Score:</label><label id="score">0</label>
+        <button onclick="toggle()" id="pause" style="float: right;padding: 5px 10px;width: 80px">Pause</button>
+    </div>
+    <canvas id="canvas" width="400px" height="600px" style="border: 5px solid black;"></canvas>
+</div>
+<div id="over" style="display:none;width: 100%;height: 100%;background: rgba(0, 0, 0 , 0.6);z-index: 9999;position: relative">
+<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);color: white;font-size: 50px;">
+    <div>Game Over!</div>
+    <button onclick="start();document.getElementById('over').style.display = 'none'" style="padding: 10px 40px;position:relative;left: 50%; transform: translate(-50%, 0)">Restart</button></div>
+</div>
+</body>
+<style>
+    .black{
+        background: black;
+        color: white;
+    }
+    .white{
+        background: white;
+        color: grey;
+    }
+</style>
+<script>
+    let blocks = [
+        [[[0,0],[0,1],[0,2],[1,2]],[[2,0],[1,0],[0,0],[0,1]],[[2,2],[2,1],[2,0],[1,0]],[[0,2],[1,2],[2,2],[2,1]]],
+        [[[0,0],[0,1],[1,0],[1,1]]],
+        [[[1,0],[1,1],[1,2],[0,2]],[[2,1],[1,1],[0,1],[0,0]],[[1,2],[1,1],[1,0],[2,0]],[[0,1],[1,1],[2,1],[2,2]]],
+        [[[0,0],[0,1],[0,2],[0,3]],[[2,0],[1,0],[0,0],[-1,0]]],
+        [[[1,0],[0,1],[1,1],[2,1]],[[2,1],[1,0],[1,1],[1,2]],[[1,2],[2,1],[1,1],[0,1]],[[0,1],[1,2],[1,1],[1,0]]],
+        [[[0,0],[1,0],[1,1],[2,1]],[[2,0],[2,1],[1,1],[1,2]]],
+        [[[0,1],[1,1],[1,0],[2,0]],[[1,0],[1,1],[2,1],[2,2]]]
+    ]
+    let color = ["LightGreen", "PeachPuff", "Salmon", "Gold", "LightBlue", "LightSlateBlue", "pink"]
+    let colorIndex = 0
+    let width = 18
+    let canvas = document.getElementById('canvas')
+    let ctx = canvas.getContext('2d')
+    let w = 20, h = 30, grid = [], curBlock
+    let down, inter, quickInter, gameOver = false, score, blockIndex, stateIndex, pause = false
+    let backColor = 'white'
+    document.getElementById('pause').className = backColor
+
+    function toggle() {
+        pause = !pause
+        if(pause) {
+            document.getElementById('pause').innerText = 'Resume'
+        } else {
+            document.getElementById('pause').innerText = 'Pause'
+        }
+    }
+    function generateBlock() {
+        blockIndex = Math.floor(Math.random() * blocks.length)
+        stateIndex = Math.floor(Math.random() * blocks[blockIndex].length)
+        curBlock = JSON.parse(JSON.stringify(blocks[blockIndex][stateIndex]))
+        if(!move(curBlock, [8, 0])) {
+            gameOver = true
+            forceMove(curBlock, [8, 0])
+            while (true) {
+                let valid = true
+                for(let b of curBlock) {
+                    if(b[0] >= 0 && b[1] >= 0 && grid[b[0]][b[1]] >= 0) {
+                        valid = false
+                    }
+                }
+                if(valid) {
+                    break
+                }
+                forceMove(curBlock, [0, -1])
+            }
+            document.getElementById('over').style.display = 'block'
+        } else {
+            down = false
+        }
+        curBlock.color = getColorIdx()
+        drawBlock(curBlock)
+    }
+
+    function rowFull(rows, idx) {
+        if(idx < 0) {
+            let cnt = 0
+            for(let j = h - 1; j >= 0; j--) {
+                if(cnt > 0) {
+                    for(let i = 0; i < w; i++) {
+                        grid[i][j + cnt] = grid[i][j]
+                    }
+                }
+                cnt += rows.has(j) ? 1 : 0
+            }
+            for(let j = 0; j < cnt; j++) {
+                for(let i = 0; i < w; i++) {
+                    grid[i][j] = -1
+                }
+            }
+            generateBlock()
+        } else {
+            setTimeout(() => {
+                for(let j of rows) {
+                    for (let i = 0; i < w; i++) {
+                        drawRect(i, j, idx % 2 == 0 ? "white" : "grey", "#eee")
+                    }
+                }
+                rowFull(rows, idx - 1)
+            }, 100)
+        }
+    }
+
+    function refresh() {
+        if(!gameOver && !pause) {
+            let stop = false
+            for (let b of curBlock) {
+                if (b[1] + 1 >= h || grid[b[0]][b[1] + 1] >= 0) {
+                    down = true
+                    break
+                }
+            }
+            if (down) {
+                let row = new Set()
+                for (let b of curBlock) {
+                    grid[b[0]][b[1]] = curBlock.color
+                    row.add(b[1])
+                }
+                for (let i = 0; i < w; i++) {
+                    for (let j = 0; j < h; j++) {
+                        drawRect(i, j, grid[i][j] >= 0 ? color[grid[i][j]] : backColor, "#eee")
+                    }
+                }
+                stop = true
+                for(let j of row) {
+                    let full = true
+                    for (let i = 0; i < w; i++) {
+                        if(grid[i][j] < 0) {
+                            full = false
+                            break
+                        }
+                    }
+                    if(!full) {
+                        row.delete(j)
+                    }
+                }
+                if(row.size > 0) {
+                    score += row.size * 20
+                    document.getElementById('score').innerText = score
+                    rowFull(row, 3)
+                } else {
+                    generateBlock()
+                }
+            } else {
+                for (let i = 0; i < w; i++) {
+                    for (let j = 0; j < h; j++) {
+                        drawRect(i, j, grid[i][j] >= 0 ? color[grid[i][j]] : backColor, "#eee")
+                    }
+                }
+                move(curBlock, [0, 1])
+                drawBlock(curBlock)
+            }
+            return stop
+        }
+        return true
+    }
+
+    function start() {
+        gameOver = false
+        colorIndex = 0
+        score = 0
+        grid = []
+        for(let i = 0; i < w; i++) {
+            grid.push([])
+            for(let j = 0; j < h; j++) {
+                grid[i].push(-1)
+            }
+        }
+        for(let i = 0; i < w; i++) {
+            for(let j = 0; j < h; j++) {
+                drawRect(i, j, grid[i][j] >= 0 ? color[grid[i][j]] : backColor, "#eee")
+            }
+        }
+        generateBlock()
+        if(!inter) {
+            inter = setInterval(() => {
+                refresh()
+            }, 500)
+        }
+    }
+    document.body.addEventListener("keydown", e => {
+        if(!gameOver && !pause) {
+            if(e.key === "ArrowRight") {
+                move(curBlock, [1, 0])
+            } else if(e.key === "ArrowLeft") {
+                move(curBlock, [-1, 0])
+            } else if(e.key === 'ArrowDown') {
+                if(inter) {
+                    clearInterval(inter)
+                    inter = null
+                    quickInter = setInterval(() => {
+                        if(refresh()) {
+                            clearInterval(quickInter)
+                            quickInter = null
+                            inter = setInterval(() => {
+                                refresh()
+                            }, 500)
+                        }
+                    }, 10)
+                }
+            } else if(e.key === 'ArrowUp') {
+                let diff = [curBlock[0][0] - blocks[blockIndex][stateIndex][0][0], curBlock[0][1] - blocks[blockIndex][stateIndex][0][1]]
+                stateIndex = (stateIndex + 1) % blocks[blockIndex].length
+                let tmp = JSON.parse(JSON.stringify(blocks[blockIndex][stateIndex]))
+                tmp.color = curBlock.color
+                if(move(tmp, diff)){
+                    curBlock = tmp
+                } else {
+                    stateIndex = (stateIndex - 1 + blocks[blockIndex].length) % blocks[blockIndex].length
+                }
+            }
+        }
+
+    })
+    function getColorIdx() {
+        let cur = colorIndex
+        colorIndex = (colorIndex + 1) % color.length
+        return cur
+    }
+    function drawBlock(blocks) {
+        for(let b of blocks) {
+            if(b[0] >= 0 && b[1] >= 0) {
+                drawRect(b[0], b[1], color[blocks.color], "#eee")
+            }
+        }
+    }
+    function drawRect(i, j, fillColor, strokeColor) {
+        ctx.beginPath()
+        ctx.fillStyle = fillColor
+        ctx.strokeStyle = strokeColor
+        ctx.rect((width + 2) * i + 1, (width + 2) * j + 1, width, width)
+        ctx.stroke()
+        ctx.fill()
+    }
+    function move(block, direction) {
+        let valid = true
+        for(let b of block) {
+            if(b[0] + direction[0] < 0 || b[0] + direction[0] >= w || b[1] + direction[1] < 0 || b[1] + direction[1] >= h
+                || grid[b[0] + direction[0]][b[1] + direction[1]] >= 0) {
+                valid = false
+            }
+        }
+        if(valid) {
+            for(let b of block) {
+                b[0] += direction[0]
+                b[1] += direction[1]
+            }
+        }
+        return valid
+    }
+    function forceMove(block, direction) {
+        for(let b of block) {
+            b[0] += direction[0]
+            b[1] += direction[1]
+        }
+    }
+    start()
+    /*
+    function rotate(b) {
+        for(let x of b) {
+            let tmp = x[0]
+            x[0] = 2 - x[1]
+            x[1] = tmp
+        }
+    }*/
+</script>
+</html>
