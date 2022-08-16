@@ -4,21 +4,40 @@
     <meta charset="UTF-8">
     <title>扫雷</title>
 </head>
-<body style="width: 100%; height: 100%;">
-<div style="width: 800px; padding: 30px;position: absolute;left: 50%; transform: translate(-50%, 0)">
-    <label>雷数目：</label><input id="cnt" value="40"/>
-    <label>行数：</label><input id="row" value="10"/>
-    <label>列数：</label><input id="col" value="20"/>
-    <button onclick="start()">开始</button></div>
+<body style="width: 100%; height: 100%;margin: 0">
+<div style="width: 210px; padding: 30px;margin-top:20px;float: left;height: 100%;border-right: 1px solid #eee">
+    <div class="padding5"><label>雷数：</label><input id="cnt" value="10"/></div>
+    <div class="padding5"><label>行数：</label><input id="row" value="10"/></div>
+    <div class="padding5"><label>列数：</label><input id="col" value="20"/></div>
+    <button onclick="start()" style="margin-top: 5px">开始</button></div>
 <div style="position: absolute;top: 80px;left: 50%; transform: translate(-50%, 0)">
-    <canvas id="canvas" width="800px" height="600px" style="border: 5px solid black;"></canvas>
-    <div style="margin: auto;width: 160px">
-        <label>剩余雷数目：</label><label id="remain">40</label>
+    <div style="border-bottom: 1px solid #eee;width: 100%;margin-bottom: 10px;">
+        <div style="font-weight: bold;display: none;width: 180px;margin: auto;font-size: 20px;" id="rank1"><label>最快记录：</label><label id="r1">0</label><label>s</label></div>
+    </div>
+    <div style="margin: auto;width: 460px">
+        <button onclick="showRanks()" style="float: left;margin-bottom: 5px;">Ranks</button>
+        <div style="display: inline-block;margin-top: 2px;margin-left: 5px;"><label>剩余雷数目：</label><label id="remain">40</label>
+            <label>用时：</label><label id="time">00:00:00</label></div>
+    </div>
+    <canvas id="canvas" width="800px" height="600px" style="border: 5px solid #30451b;"></canvas>
+</div>
+<div id="success" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); position: relative;z-index: 99999; display: none">
+    <div style="position: absolute;top: 30%;left: 50%; transform: translate(-50%, -50%); font-size: 50px;color: white">
+        <div style="margin-left: 50px">Success!</div>
+        <div style="font-size: 18px;padding: 20px;"><label style="padding: 10px">Name:</label><input id="name"/>
+            <button onclick="save()">OK</button>
+        </div>
     </div>
 </div>
-<div id="success" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); position: relative;z-index: 99999; display: none"
-     onclick="show(this, false)">
-    <div style="position: absolute;top: 50%;left: 50%; transform: translate(-50%, -50%); font-size: 50px;color: white">Success!</div>
+<div id="noRank" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); position: relative;z-index: 99999; display: none" onclick="show(this, false)">
+    <div style="position: absolute;top: 50%;left: 50%; transform: translate(-50%, -50%); font-size: 50px;color: white">
+        <div>No Ranks!</div>
+    </div>
+</div>
+<div id="rank" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); position: relative;z-index: 99999; display: none" onclick="show(this, false)">
+    <div style="position: absolute;top: 20%;left: 50%; transform: translate(-50%, -50%); font-size: 50px;color: white">
+        <div id="rankList" style="font-size: 20px"></div>
+    </div>
 </div>
 <div id="fail" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); position: relative;z-index: 99999; display: none"
      onclick="show(this, false)">
@@ -26,7 +45,9 @@
 </div>
 </body>
 <script>
-    let m = 40, n = 30, cnt = 100
+    let closeBlock = '#99a989'
+    let m = 40, n = 30, cnt = 100, timeCost
+    let db
     let last
     let inGame = false
     let color = ["SeaGreen", "orange", "red", "green", "cyan", "blue", "purple", "pink"]
@@ -34,7 +55,13 @@
     let ctx = c.getContext('2d')
     let board
     let dir = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
+    let startTime = 0, timeInter, dbInit = false
     function start() {
+        if(timeInter) {
+            clearInterval(timeInter)
+            timeInter = undefined
+        }
+        startTime = new Date()
         last = undefined
         m = parseInt(document.getElementById('col').value)
         n = parseInt(document.getElementById('row').value)
@@ -66,13 +93,36 @@
         }
         inGame = true
         refresh()
+        timeInter = setInterval(() => {
+            timeCost = Math.floor((new Date() - startTime) / 1000)
+            let seconds = timeCost
+            let hour = Math.floor(seconds / 3600), minutes = Math.floor((seconds - hour * 3600) / 60)
+            seconds = seconds - hour * 3600 - minutes * 60
+            let innerText = (hour >= 10 ? hour : '0' + hour) + ':'
+                + (minutes >= 10 ? minutes : '0' + minutes) + ':' + (seconds >= 10 ? seconds : '0' + seconds)
+            document.getElementById('time').innerText = innerText
+        }, 100)
+        if(!dbInit) {
+            dbInit = true
+            initDb()
+        }
+        let initRanks = setInterval(() => {
+            if(db) {
+                getRanks(cur => {
+                    if(cur.length) {
+                        document.getElementById('rank1').style.display = 'block'
+                        document.getElementById('r1').innerText = cur[0].timeCost
+                    } else {
+                        document.getElementById('rank1').style.display = 'none'
+                    }
+                })
+                clearInterval(initRanks)
+            }
+        }, 100)
     }
     document.getElementById('canvas').addEventListener('click', (e) => {
         let x = Math.floor(e.offsetX / 20), y = Math.floor(e.offsetY / 20)
         if(inGame) {
-            if(board[x][y] != 'M' && board[x][y] != ' ') {
-                return
-            }
             last = [x, y]
             click(x, y)
             refresh()
@@ -82,10 +132,8 @@
     document.getElementById('canvas').addEventListener('contextmenu', e => {
         e.preventDefault()
         let x = Math.floor(e.offsetX / 20), y = Math.floor(e.offsetY / 20)
-        console.log(board[x][y], inGame)
         if(inGame) {
             if(board[x][y] != 'M' && board[x][y] != ' ') {
-                console.log(board[x][y])
                 return
             }
             last = [x, y]
@@ -149,18 +197,18 @@
                     if(board[i][j] == ' ') {
                         remain++
                     }
-                    drawRect(i, j, '#cccccc', 'white');
+                    drawRect(i, j, closeBlock, 'white');
                 } else if (board[i][j] == 'X') {
                     drawRect(i, j, 'white', 'grey');
                     drawCircle(i, j);
                 } else if (board[i][j] == 'B') {
                     drawRect(i, j, 'white', 'grey');
                 } else if (board[i][j] == 'F') {
-                    drawRect(i, j, '#cccccc', 'white');
+                    drawRect(i, j, closeBlock, 'white');
                     drawFlag(i, j)
                     found++
                 } else if (board[i][j] == 'O') {
-                    drawRect(i, j, '#cccccc', 'white');
+                    drawRect(i, j, closeBlock, 'white');
                     drawFlag(i, j)
                     drawX(i, j)
                 } else {
@@ -177,12 +225,20 @@
             }
         }
         document.getElementById('remain').innerText = String(cnt - found)
-        console.log(String(cnt - found), cnt , found)
         if(remain === 0 && inGame) {
             inGame = false
             show(document.getElementById('success'), true)
+            console.log(timeInter)
+            if(timeInter) {
+                clearInterval(timeInter)
+                timeInter = undefined
+            }
         } else if(!inGame) {
             show(document.getElementById('fail'), true)
+            if(timeInter) {
+                clearInterval(timeInter)
+                timeInter = undefined
+            }
         }
     }
     function canvasText(ctx, text, font, color, x, y) {
@@ -248,31 +304,164 @@
     }
 
     function click(i, j) {
-        let mC = 0
         if(board[i][j] == 'M') {
             inGame = false
             board[i][j] = 'X'
             endGame()
             return
         }
-        for(let d of dir) {
-            let nextI = i + d[0], nextJ = j + d[1]
-            if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && (board[nextI][nextJ] == 'M' || board[nextI][nextJ] == 'F')) {
-                mC++;
+        if(board[i][j] >= '1' && board[i][j] <= '8') {
+            let fC = 0
+            for(let d of dir) {
+                let nextI = i + d[0], nextJ = j + d[1]
+                if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && board[nextI][nextJ] == 'F') {
+                    fC++;
+                }
+            }
+            if(fC == board[i][j]) {
+                for(let d of dir) {
+                    let nextI = i + d[0], nextJ = j + d[1]
+                    if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && board[nextI][nextJ] == ' ') {
+                        click(nextI, nextJ)
+                    }
+                }
+            }
+        } else if(board[i][j] == ' ') {
+            let mC = 0
+            for(let d of dir) {
+                let nextI = i + d[0], nextJ = j + d[1]
+                if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && (board[nextI][nextJ] == 'M' || board[nextI][nextJ] == 'F')) {
+                    mC++;
+                }
+            }
+            if(mC > 0) {
+                board[i][j] = mC;
+                return
+            }
+            board[i][j] = 'B'
+            for(let d of dir) {
+                let nextI = i + d[0], nextJ = j + d[1]
+                if (nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && board[nextI][nextJ] == ' ') {
+                    click(nextI, nextJ)
+                }
             }
         }
-        if(mC > 0) {
-            board[i][j] = mC;
-            return
+
+    }
+    function initDb () {
+        let request = window.indexedDB.open('minesweeper', 1)
+        request.onerror = ev => {
         }
-        board[i][j] = 'B'
-        for(let d of dir) {
-            let nextI = i + d[0], nextJ = j + d[1]
-            if (nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && board[nextI][nextJ] == ' ') {
-                click(nextI, nextJ)
+        request.onsuccess = ev => {
+            db = request.result;
+            console.log(db.version)
+            console.log(db.objectStoreNames)
+        }
+        request.onupgradeneeded = ev => {
+            console.log('onupgradeneeded')
+            db = ev.target.result;
+            console.log(db.objectStoreNames)
+            if (!db.objectStoreNames.contains('rank')) {
+                db.createObjectStore('rank', {keyPath: 'id'});
+                console.log('rank created')
             }
         }
     }
+    function addRank() {
+        if(db) {
+            let rank = {}
+            rank.id = `${n}-${m}-${cnt}-${name}`
+            rank.createdAt = new Date()
+            rank.timeCost = timeCost
+            rank.row = n
+            rank.col = m
+            rank.cnt = cnt
+            rank.name = name
+            getRank(rank.id, result => {
+                if(result && result.timeCost > rank.timeCost) {
+                    db.transaction(['rank'], 'readwrite').objectStore('rank').put(rank)
+                } else {
+                    db.transaction(['rank'], 'readwrite').objectStore('rank').add(rank)
+                }
+            })
+
+        }
+    }
+    function save() {
+        name = document.getElementById('name').value
+        if(!name) {
+            alert("Name can not be empty!")
+        } else {
+            addRank()
+            show(document.getElementById('success'), false)
+        }
+    }
+    function getRanks(callback) {
+        let req = db.transaction(['rank']).objectStore('rank').getAll()
+        req.onsuccess = ev => {
+            let cur = req.result.filter(r => r.row == n && r.col == m && r.cnt == cnt);
+            cur.sort((r1,r2) => r1.timeCost - r2.timeCost)
+            callback(cur)
+        }
+    }
+    function getRank(id, callback) {
+        let req = db.transaction(['rank']).objectStore('rank').get(id)
+        req.onsuccess = e => {
+            callback(req.result)
+        }
+    }
+    function showRanks() {
+        //let req = db.transaction(['rank'], 'readwrite').objectStore('rank').clear()
+        getRanks(cur => {
+            console.log(cur)
+            if(cur.length) {
+                document.getElementById('rank').style.display = 'block'
+                let data = ''
+                for(let [index, item] of cur.entries()) {
+                    data += `<tr><td>${index + 1}</td><td>${item.name}</td><td>${item.timeCost}</td></tr>`
+                }
+                document.getElementById('rankList').innerHTML = `<h2>Ranks(${n} Rows ${m} Columns ${cnt} mines)</h2>` +
+                    '<table>\n' +
+                    '  <tr>\n' +
+                    '    <th>Rank</th>\n' +
+                    '    <th>Name</th>\n' +
+                    '    <th>Time Cost</th>\n' +
+                    '  </tr>\n' + data +
+                    '</table>'
+            } else {
+                document.getElementById('noRank').style.display = 'block'
+            }
+        })
+    }
     start()
 </script>
+<style>
+    table {
+        font-family: arial, sans-serif;
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+    td, th {
+        border: 1px solid #dddddd;
+        text-align: left;
+        padding: 8px;
+    }
+
+    tr:nth-child(even) {
+        background-color: #dddddd;
+        color: black;
+    }
+    button{
+        color: black;
+        background: white;
+        padding: 5px 20px;
+    }
+    input {
+        padding: 5px;
+    }
+    .padding5 {
+        padding: 5px 0;
+    }
+</style>
 </html>
