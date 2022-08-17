@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+    <meta charset="UTF-8">
+    <title>扫雷</title>
+</head>
+<body>
+<div style="position: absolute">
+    <div style="height: 40px;">
+        <div style="display: inline-block;width: 45px;font-size: 12px;margin-left: 2px;"><label>Level:</label><label id="level"></label></div>
+        <button onclick="setOper('D')" id="d">D</button>
+        <button onclick="setOper('F')" id="f" style="margin-left: 5px;">F</button>
+        <div style="font-weight: bold;display: none;width: 180px;font-size: 10px;" id="rank1">
+            <button onclick="showRanks()">R</button> <label>No.1：</label><label id="r1">0</label><label>s</label></div>
+    </div>
+    <canvas id="canvas" width="400px" height="600px" style="border: 5px solid #30451b;margin-left: 5px"></canvas>
+   <div>
+       <button id="prev" onclick="goPrevLevel()"><</button>
+       <label>Remaining：</label><label id="remain">40</label>
+       <label>Cost：</label><label id="time">00:00:00</label>
+       <button id="next" onclick="goNextLevel()">></button>
+   </div>
+</div>
+<div id="success" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); position: relative;z-index: 99999; display: none">
+    <div style="position: absolute;top: 30%;left: 50%; transform: translate(-50%, -50%); font-size: 50px;color: white">
+        <div style="margin-left: 0px">Success!</div>
+        <div style="font-size: 18px;padding: 20px;">
+            <label style="">Name:</label><input id="name"/>
+            <div style="margin-top: 10px;">
+                <button onclick="save()">Again</button>
+                <button onclick="save(true)">Next</button></div>
+        </div>
+    </div>
+</div>
+<div id="rank" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); position: relative;z-index: 99999; display: none"
+     onclick="show(this, false, false)">
+    <div style="position: absolute;top: 20%;left: 50%; transform: translate(-50%, -50%); font-size: 50px;color: white">
+        <div id="rankList" style="font-size: 20px"></div>
+    </div>
+</div>
+<div id="fail" style="width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); position: relative;z-index: 99999; display: none"
+     onclick="show(this, false)">
+    <div style="position: absolute;top: 50%;left: 50%; transform: translate(-50%, -50%); font-size: 50px;color: white">Failed!</div>
+</div>
+</body>
+<script>
+    let canvas = document.getElementById('canvas')
+    let ctx = canvas.getContext('2d')
+    let w = document.documentElement.clientWidth - 20, h = document.documentElement.clientHeight - 80
+    w = Math.floor(w / 20) * 20
+    h = Math.floor(h / 20) * 20
+    canvas.width = w
+    canvas.height = h
+    let closeBlock = '#99a989'
+    let m = Math.floor(w / 20), n = Math.floor(h / 20)
+    let minCnt = Math.floor(m * n / 20), maxCnt = Math.floor(m * n / 3), cnt = minCnt, level = 1, timeCost
+    let db
+    let last
+    let inGame = false
+    let color = ["SeaGreen", "orange", "red", "green", "cyan", "blue", "purple", "pink"]
+    let board
+    let dir = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]
+    let startTime = 0, timeInter, dbInit = false
+    let oper ='D'
+    function black(d) {
+        d.style.background = 'black'
+        d.style.color = 'white'
+    }
+
+    function white(f) {
+        f.style.background = 'white'
+        f.style.color = 'black'
+    }
+
+    function setOper(flag){
+        oper = flag
+        let d = document.getElementById('d'), f = document.getElementById('f')
+        if(flag == 'D') {
+            black(d);
+            white(f);
+        } else {
+            black(f)
+            white(d)
+        }
+    }
+    function start() {
+        if(timeInter) {
+            clearInterval(timeInter)
+            timeInter = undefined
+        }
+        startTime = new Date()
+        last = undefined
+        board = init()
+        let tmp = cnt
+        while (tmp > 0) {
+            let i = Math.floor(Math.random() * m), j = Math.floor(Math.random() * n)
+            if(board[i][j] == ' ') {
+                board[i][j] = 'M'
+                tmp--
+            }
+        }
+        inGame = true
+        setOper('D')
+        let prev = document.getElementById('prev'), next = document.getElementById('next')
+        let le = document.getElementById('level')
+        le.innerText = level
+        if(cnt == minCnt) {
+            prev.setAttribute('disabled', '')
+        } else if(cnt == maxCnt) {
+            next.setAttribute('disabled', '')
+        } else {
+            prev.removeAttribute('disabled')
+            next.removeAttribute('disabled')
+        }
+        refresh()
+        timeInter = setInterval(() => {
+            timeCost = Math.floor((new Date() - startTime) / 1000)
+            let seconds = timeCost
+            let hour = Math.floor(seconds / 3600), minutes = Math.floor((seconds - hour * 3600) / 60)
+            seconds = seconds - hour * 3600 - minutes * 60
+            let innerText = (hour >= 10 ? hour : '0' + hour) + ':'
+                + (minutes >= 10 ? minutes : '0' + minutes) + ':' + (seconds >= 10 ? seconds : '0' + seconds)
+            document.getElementById('time').innerText = innerText
+        }, 100)
+        if(!dbInit) {
+            dbInit = true
+            initDb()
+        }
+        let initRanks = setInterval(() => {
+            if(db) {
+                getRanks(cur => {
+                    if(cur.length) {
+                        document.getElementById('rank1').style.display = 'inline-block'
+                        document.getElementById('r1').innerText = cur[0].timeCost
+                    } else {
+                        document.getElementById('rank1').style.display = 'none'
+                    }
+                })
+                clearInterval(initRanks)
+            }
+        }, 100)
+    }
+    document.getElementById('canvas').addEventListener('click', (e) => {
+        let x = Math.floor(e.offsetX / 20), y = Math.floor(e.offsetY / 20)
+        if(inGame) {
+            last = [x, y]
+            if(board[x][y] >= '1' && board[x][y] <= '8') {
+                click(x, y)
+                refresh()
+            } else {
+                if(oper == 'D') {
+                    dig()
+                } else {
+                    flag()
+                }
+            }
+        }
+    })
+    function init() {
+        let board = []
+        for(let i = 0; i < m; i++) {
+            board.push([])
+            for(let j = 0; j < n; j++) {
+                board[i].push(' ')
+            }
+        }
+        return board
+    }
+
+    function goPrevLevel() {
+        if(level > 1) {
+            level--
+            cnt = minCnt + (level - 1) * 10
+        }
+        start()
+    }
+    function goNextLevel() {
+        if(cnt < maxCnt) {
+            level++
+            cnt = Math.min(minCnt + (level - 1) * 10, maxCnt)
+        }
+        start()
+    }
+    function show(element, flag, doStart = true) {
+        if(flag) {
+            element.style.display = 'block';
+        } else {
+            element.style.display = 'none';
+            if(doStart) {
+                start()
+            }
+        }
+    }
+
+    function drawRect(i, j, fillColor, strokeColor) {
+        ctx.beginPath()
+        ctx.fillStyle = fillColor
+        ctx.strokeStyle = strokeColor
+        ctx.rect(20 * i, 20 * j, 20, 20)
+        ctx.stroke()
+        ctx.fill()
+    }
+
+    function drawCircle(i, j) {
+        ctx.beginPath()
+        ctx.fillStyle = 'black'
+        ctx.arc(20 * i + 10, 20 * j + 10, 6, 0, 2 * Math.PI)
+        ctx.fill()
+    }
+
+    // X: 挖开的地雷（出现即死） M: 隐藏的地雷 B:挖开的正常格子（周围没有地雷） 数字1-8：挖开的格子（周围有1-8颗地雷）
+    // F:标注出来的地雷 空格：没有挖开的正常格子 O:错误标注的地雷（出现即死）
+    function refresh() {
+        document.getElementById('canvas').width = m * 20
+        document.getElementById('canvas').height = n * 20
+        let remain = 0
+        let found = 0
+        for (let i = 0; i < m; i++) {
+            for (let j = 0; j < n; j++) {
+                if (board[i][j] == ' ' || board[i][j] == 'M') {
+                    if(board[i][j] == ' ') {
+                        remain++
+                    }
+                    drawRect(i, j, closeBlock, 'white');
+                } else if (board[i][j] == 'X') {
+                    drawRect(i, j, 'white', 'grey');
+                    drawCircle(i, j);
+                } else if (board[i][j] == 'B') {
+                    drawRect(i, j, 'white', 'grey');
+                } else if (board[i][j] == 'F') {
+                    drawRect(i, j, closeBlock, 'white');
+                    drawFlag(i, j)
+                    found++
+                } else if (board[i][j] == 'O') {
+                    drawRect(i, j, closeBlock, 'white');
+                    drawFlag(i, j)
+                    drawX(i, j)
+                } else {
+                    drawRect(i, j, 'white', 'grey');
+                    canvasText(ctx, board[i][j], "15px bold 黑体", color[board[i][j] - '1'], 20 * i + 10, 20 * j + 10);
+                }
+
+                if (last && last[0] == i && last[1] == j) {
+                    ctx.beginPath()
+                    ctx.strokeStyle = 'red'
+                    ctx.rect(20 * i, 20 * j, 20, 20)
+                    ctx.stroke()
+                }
+            }
+        }
+        document.getElementById('remain').innerText = String(cnt - found)
+        if(remain === 0 && inGame) {
+            inGame = false
+            show(document.getElementById('success'), true)
+            if(timeInter) {
+                clearInterval(timeInter)
+                timeInter = undefined
+            }
+        } else if(!inGame) {
+            show(document.getElementById('fail'), true)
+            if(timeInter) {
+                clearInterval(timeInter)
+                timeInter = undefined
+            }
+        }
+    }
+    function canvasText(ctx, text, font, color, x, y) {
+        ctx.font = font;
+        ctx.fillStyle = color;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(text, x, y);
+    }
+
+    function drawFlag(x, y) {
+        x = x * 20
+        y = y * 20
+        ctx.beginPath()
+        ctx.strokeStyle = 'black'
+        ctx.fillStyle = 'red'
+        ctx.moveTo(x + 5, y + 5)
+        ctx.lineTo(x + 13, y + 10)
+        ctx.lineTo(x + 5, y + 10)
+        ctx.lineTo(x + 5, y + 15)
+        ctx.closePath()
+        ctx.stroke()
+        ctx.fill()
+    }
+
+    function drawX(x, y) {
+        x = x * 20
+        y = y * 20
+        ctx.strokeStyle = 'black'
+        ctx.beginPath()
+        ctx.moveTo(x, y)
+        ctx.lineTo(x + 20, y + 20)
+        ctx.stroke()
+        ctx.beginPath()
+        ctx.moveTo(x + 20, y)
+        ctx.lineTo(x, y + 20)
+        ctx.stroke()
+    }
+
+
+
+    function endGame() {
+        for(let i = 0; i < m; i++) {
+            for (let j = 0; j < n; j++) {
+                if(board[i][j] == 'M') {
+                    board[i][j] = 'X'
+                } else if(board[i][j] == ' ') {
+                    let mC = 0
+                    for(let d of dir) {
+                        let nextI = i + d[0], nextJ = j + d[1]
+                        if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && (board[nextI][nextJ] == 'M' || board[nextI][nextJ] == 'F' || (board[nextI][nextJ] == 'M' || board[nextI][nextJ] == 'X'))) {
+                            mC++;
+                        }
+                    }
+                    if(mC > 0) {
+                        board[i][j] = mC
+                    } else {
+                        board[i][j] = 'B'
+                    }
+                }
+            }
+        }
+    }
+    function dig() {
+        click(last[0], last[1])
+        refresh()
+    }
+    function flag() {
+        let [x, y] = last
+        if(inGame) {
+            if(board[x][y] != 'M' && board[x][y] != ' ') {
+                return
+            }
+            last = [x, y]
+            if(board[x][y] != 'M') {
+                inGame = false
+                board[x][y] = 'O'
+                endGame()
+                refresh()
+            } else {
+                board[x][y] = 'F'
+                refresh()
+            }
+        }
+    }
+    function click(i, j) {
+        if(board[i][j] == 'M') {
+            inGame = false
+            board[i][j] = 'X'
+            endGame()
+            return
+        }
+        if(board[i][j] >= '1' && board[i][j] <= '8') {
+            let fC = 0
+            for(let d of dir) {
+                let nextI = i + d[0], nextJ = j + d[1]
+                if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && board[nextI][nextJ] == 'F') {
+                    fC++;
+                }
+            }
+            if(fC == board[i][j]) {
+                for(let d of dir) {
+                    let nextI = i + d[0], nextJ = j + d[1]
+                    if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && board[nextI][nextJ] == ' ') {
+                        click(nextI, nextJ)
+                    }
+                }
+            }
+        } else if(board[i][j] == ' ') {
+            let mC = 0
+            for(let d of dir) {
+                let nextI = i + d[0], nextJ = j + d[1]
+                if(nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && (board[nextI][nextJ] == 'M' || board[nextI][nextJ] == 'F')) {
+                    mC++;
+                }
+            }
+            if(mC > 0) {
+                board[i][j] = mC;
+                return
+            }
+            board[i][j] = 'B'
+            for(let d of dir) {
+                let nextI = i + d[0], nextJ = j + d[1]
+                if (nextI >= 0 && nextI < m && nextJ >= 0 && nextJ < n && board[nextI][nextJ] == ' ') {
+                    click(nextI, nextJ)
+                }
+            }
+        }
+    }
+    function initDb () {
+        let request = window.indexedDB.open('minesweeper', 1)
+        request.onerror = ev => {
+        }
+        request.onsuccess = ev => {
+            db = request.result;
+            console.log(db.version)
+            console.log(db.objectStoreNames)
+        }
+        request.onupgradeneeded = ev => {
+            console.log('onupgradeneeded')
+            db = ev.target.result;
+            console.log(db.objectStoreNames)
+            if (!db.objectStoreNames.contains('rank')) {
+                db.createObjectStore('rank', {keyPath: 'id'});
+                console.log('rank created')
+            }
+        }
+    }
+    function addRank() {
+        if(db) {
+            let rank = {}
+            rank.id = `${n}-${m}-${cnt}-${name}`
+            rank.createdAt = new Date()
+            rank.timeCost = timeCost
+            rank.row = n
+            rank.col = m
+            rank.cnt = cnt
+            rank.name = name
+            getRank(rank.id, result => {
+                if(result && result.timeCost > rank.timeCost) {
+                    db.transaction(['rank'], 'readwrite').objectStore('rank').put(rank)
+                } else {
+                    db.transaction(['rank'], 'readwrite').objectStore('rank').add(rank)
+                }
+            })
+
+        }
+    }
+    function save(next = false) {
+        name = document.getElementById('name').value
+        if(!name) {
+            alert("Name can not be empty!")
+        } else {
+            addRank()
+            show(document.getElementById('success'), false)
+            if(next) {
+                goNextLevel()
+            }
+        }
+    }
+    function getRanks(callback) {
+        let req = db.transaction(['rank']).objectStore('rank').getAll()
+        req.onsuccess = ev => {
+            let cur = req.result.filter(r => r.row == n && r.col == m && r.cnt == cnt);
+            cur.sort((r1,r2) => r1.timeCost - r2.timeCost)
+            callback(cur.slice(0, 5))
+        }
+    }
+    function getRank(id, callback) {
+        let req = db.transaction(['rank']).objectStore('rank').get(id)
+        req.onsuccess = e => {
+            callback(req.result)
+        }
+    }
+    function showRanks() {
+        //let req = db.transaction(['rank'], 'readwrite').objectStore('rank').clear()
+        getRanks(cur => {
+            if(cur.length) {
+                document.getElementById('rank').style.display = 'block'
+                let data = ''
+                for(let [index, item] of cur.entries()) {
+                    data += `<tr><td>${index + 1}</td><td>${item.name}</td><td>${item.timeCost}</td></tr>`
+                }
+                document.getElementById('rankList').innerHTML = `<h2>Ranks(Level:${level})</h2>` +
+                    `<p></p>` +
+                    '<table>\n' +
+                    '  <tr>\n' +
+                    '    <th>Rank</th>\n' +
+                    '    <th>Name</th>\n' +
+                    '    <th>Cost</th>\n' +
+                    '  </tr>\n' + data +
+                    '</table>'
+            }
+        })
+    }
+    start()
+</script>
+<style>
+    html{
+        width: 100%;
+        height: 100%;
+    }
+    body{
+        width: 100%;
+        height: 100%;
+        margin: 0;
+    }
+    button{
+        color: black;
+        background: white;
+        padding: 5px 20px;
+        margin: 1px;
+    }
+    table {
+        font-family: arial, sans-serif;
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+    td, th {
+        border: 1px solid #dddddd;
+        text-align: left;
+        padding: 10px;
+    }
+
+    tr:nth-child(even) {
+        background-color: #dddddd;
+        color: black;
+    }
+</style>
+</html>
