@@ -157,6 +157,15 @@
             }
         }
     })
+    document.getElementById('canvas').addEventListener('contextmenu', e => {
+        e.preventDefault()
+        if(inGame) {
+            let x = Math.floor(e.offsetX / 20), y = Math.floor(e.offsetY / 20)
+            last = [x, y]
+            flag()
+        }
+    })
+
     function init() {
         let board = []
         for(let i = 0; i < m; i++) {
